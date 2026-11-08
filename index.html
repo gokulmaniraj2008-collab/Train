@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08111f">
+<meta name="description" content="Explore an Indian Railways train in an interactive 3D viewer.">
+<title>Indian Railways — 3D Train Viewer</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#08111f;color:#f4f7fb}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{background:radial-gradient(ellipse at 50% 25%,#172b43 0,#08111f 65%)}
+#app{height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom)}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 2px 10px;gap:10px}
+.brand{display:flex;align-items:center;gap:10px}.logo{width:40px;height:40px;border-radius:13px;background:linear-gradient(145deg,#f5b942,#e47728);display:grid;place-items:center;color:#151b25;font-size:22px}
+h1{font-size:clamp(16px,4vw,21px);margin:0;font-weight:750;letter-spacing:-.4px}.sub{font-size:11px;color:#9fb1c7;margin-top:3px}
+.pill{font-size:11px;color:#b8d7ff;border:1px solid #294663;border-radius:99px;padding:7px 10px;white-space:nowrap}
+.stage{position:relative;flex:1;min-height:220px;border:1px solid #22364e;border-radius:22px;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,#263c54 0,#101e30 58%,#0b1523 100%);box-shadow:0 20px 60px #0005}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#0b1726d9;z-index:2;text-align:center;padding:24px}
+.spinner{width:34px;height:34px;border:3px solid #36516d;border-top-color:#f3b544;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+#loadText{font-size:14px;color:#dce8f6}#progress{width:min(250px,80%);height:5px;background:#263b52;border-radius:8px;overflow:hidden}#bar{height:100%;width:0;background:#f2b544;transition:width .2s}
+#hint{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#b9c8d8;font-size:11px;pointer-events:none;text-shadow:0 1px 4px #000}
+.controls{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;padding:12px 0 10px}
+button{border:1px solid #31465f;background:#14243a;color:#f4f7fb;border-radius:14px;min-height:52px;padding:8px 4px;font:600 12px inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;touch-action:manipulation}
+button:active{transform:scale(.97);background:#203955}button.primary{background:#f2b544;color:#17202b;border-color:#f2b544}
+.ico{font-size:19px;line-height:20px}
+footer{display:flex;justify-content:space-between;align-items:center;color:#8195ad;font-size:10px;padding:0 3px 8px}
+#error{display:none;color:#ffc6bd;font-size:12px;line-height:1.5;max-width:290px}
+@media(min-width:760px){#app{max-width:1100px;width:100%;margin:auto;padding-left:24px;padding-right:24px}header{padding-top:20px}.stage{min-height:400px}.controls{max-width:560px;width:100%;align-self:center}button{min-height:58px;font-size:13px}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div id="app">
+<header><div class="brand"><div class="logo">🚆</div><div><h1>Indian Railways 3D</h1><div class="sub">Interactive train experience</div></div></div><div class="pill">360° VIEWER</div></header>
+<main class="stage" id="stage">
+<div id="loading"><div class="spinner" id="spinner"></div><div id="loadText">Loading 3D train model…</div><div id="progress"><div id="bar"></div></div><div id="error"></div></div>
+<div id="hint">Drag to rotate · Pinch to zoom · Two fingers to pan</div>
+</main>
+<section class="controls" aria-label="3D viewer controls">
+<button class="primary" id="rotate"><span class="ico">⟳</span><span>Auto rotate</span></button>
+<button id="reset"><span class="ico">⌖</span><span>Reset view</span></button>
+<button id="zoomIn"><span class="ico">＋</span><span>Zoom in</span></button>
+<button id="zoomOut"><span class="ico">－</span><span>Zoom out</span></button>
+</section>
+<footer><span>Model: Indian Railways train</span><span>Touch optimized · Android</span></footer>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+const stage=document.getElementById('stage'),loading=document.getElementById('loading'),bar=document.getElementById('bar'),loadText=document.getElementById('loadText'),error=document.getElementById('error');
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x101e30);
+const camera=new THREE.PerspectiveCamera(42,1,.1,5000);camera.position.set(7,5,10);
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.8));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+stage.insertBefore(renderer.domElement,document.getElementById('hint'));
+scene.add(new THREE.HemisphereLight(0xd9eaff,0x354052,2.1));
+const key=new THREE.DirectionalLight(0xffffff,3.1);key.position.set(8,12,10);scene.add(key);
+const rim=new THREE.DirectionalLight(0x83baff,1.6);rim.position.set(-8,5,-10);scene.add(rim);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(2000,2000),new THREE.MeshStandardMaterial({color:0x101e30,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.03;scene.add(ground);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.07;controls.rotateSpeed=.65;controls.zoomSpeed=.85;controls.panSpeed=.65;controls.minDistance=.5;controls.maxDistance=1500;controls.target.set(0,1,0);
+let model=null,autoRotate=false,initial={position:null,target:null};
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false)}
+new ResizeObserver(resize).observe(stage);resize();
+const url='https://raw.githubusercontent.com/gokulmaniraj2008-collab/Train/main/indian_railways_train_master.glb';
+new GLTFLoader().load(url,gltf=>{
+ model=gltf.scene;scene.add(model);
+ const box=new THREE.Box3().setFromObject(model),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+ model.position.sub(center);
+ const maxDim=Math.max(size.x,size.y,size.z)||10;const distance=maxDim*1.65;
+ camera.position.set(distance*.8,distance*.48,distance*.95);controls.target.set(0,0,0);camera.near=Math.max(.01,maxDim/1000);camera.far=maxDim*100;camera.updateProjectionMatrix();controls.minDistance=maxDim*.25;controls.maxDistance=maxDim*12;
+ initial.position=camera.position.clone();initial.target=controls.target.clone();
+ loading.style.display='none';
+},xhr=>{if(xhr.total){bar.style.width=(xhr.loaded/xhr.total*100).toFixed(1)+'%';loadText.textContent='Loading train… '+Math.round(xhr.loaded/xhr.total*100)+'%'}else{loadText.textContent='Downloading 3D train model…'}},err=>{
+ document.getElementById('spinner').style.display='none';document.getElementById('progress').style.display='none';loadText.textContent='Could not load the train model';error.style.display='block';error.textContent='Check your internet connection and reload the page. The 3D model is hosted in the GitHub repository.';
+ console.error(err);
+});
+document.getElementById('rotate').onclick=()=>{autoRotate=!autoRotate;controls.autoRotate=autoRotate;controls.autoRotateSpeed=1.1;document.getElementById('rotate').classList.toggle('primary',autoRotate)};
+document.getElementById('reset').onclick=()=>{if(initial.position){camera.position.copy(initial.position);controls.target.copy(initial.target);controls.update()}};
+document.getElementById('zoomIn').onclick=()=>{camera.position.multiplyScalar(.82);controls.update()};
+document.getElementById('zoomOut').onclick=()=>{camera.position.multiplyScalar(1.22);controls.update()};
+function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)}animate();
+</script>
+</body></html>
